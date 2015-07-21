@@ -1,0 +1,404 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark" 
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		title="ItemsDetailsView"	
+		initialize="initApp(event);"  actionBarVisible="false"
+		xmlns:containers="containers.*"
+		xmlns:comps="comps.*"	
+		backgroundAlpha="0" contentBackgroundAlpha="0">
+	
+	<fx:Declarations>		
+		<mx:NumberFormatter id="nf" precision="2" useThousandsSeparator="false" useNegativeSign="false"/>		
+	</fx:Declarations>	
+	
+	
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/halo";
+		
+		.mystyle {
+			fontFamily:myBoldMyriadFont;
+			fontSize: 32pt;
+			fontWeight: bold;
+		}
+		
+		s|Button#back_btn{
+			baseColor: red;
+			color: #CCCCCC;
+			fontSize: 16;
+			fontFamily: "Comic Sans MS";
+		}				
+		
+	</fx:Style>
+	
+	
+	<fx:Script>
+		<![CDATA[
+			import alert.AlertMessage;
+			
+			import mx.collections.ArrayCollection;
+			import mx.core.FlexGlobals;
+			import mx.events.FlexEvent;
+			import mx.events.ItemClickEvent;
+			import mx.managers.PopUpManager;
+			import mx.messaging.ChannelSet;
+			import mx.messaging.channels.AMFChannel;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.rpc.remoting.RemoteObject;
+			import mx.utils.ArrayUtil;
+			import mx.utils.ObjectUtil;
+			
+			import spark.components.SplitViewNavigator;
+			import spark.components.ViewNavigator;
+			
+			import views.ImageSlider;
+			
+			
+			private var selectStmt:SQLStatement;
+			private var SqlStmt:SQLStatement;			
+			private var cover1:spark.components.Label;
+			public var spicyOptStr:String = ""; 
+			public var sugarOptStr:String = ""; 
+			public var saltOptStr:String = ""; 
+		
+			
+			[Bindable]	private var totalImages:int=0;
+			[Bindable]	private var selectedOption:ArrayCollection=new ArrayCollection;
+			
+			
+		
+				[Embed(source='../assets/Tangerine.ttf', 
+					fontWeight='bold', 
+					fontName='myBoldMyriadFont', 
+					mimeType='application/x-font', 
+					advancedAntiAliasing='true'
+				)] 
+				private var font2:Class;		
+			
+			
+			private function initApp(event:FlexEvent):void {
+				//enableKeyListeners();		
+				FlexGlobals.topLevelApplication.types.visible=false;
+				if(FlexGlobals.topLevelApplication.orders.length > 0)
+				{
+					FlexGlobals.topLevelApplication.order_panel.visible=true;
+					FlexGlobals.topLevelApplication.order_panel.opened=false;
+					FlexGlobals.topLevelApplication.subTotal.visible=true;
+				} 
+				
+				selectedOption.addItem({ "spicy": "normal"});
+				selectedOption.addItem({ "sugar": "normal"});
+				selectedOption.addItem({ "salt": "normal"});
+				
+				/* CODE FOR OPTIONS */
+				if(parseInt(data.spicyOpt)==0){
+					spicy_grp.visible=false;spicy_grp.height=0;
+				}
+				else {
+					spicy_grp.visible=true;spicy_grp.height=30;	
+				}
+				
+				if(parseInt(data.sugarOpt)==0){
+					sugar_grp.visible=false;sugar_grp.height=0;
+				}
+				else {
+					sugar_grp.visible=true;sugar_grp.height=30;	
+				}
+				
+				if(parseInt(data.saltOpt)==0){
+					salt_grp.visible=false;salt_grp.height=0;
+				}
+				else {
+					salt_grp.visible=true;salt_grp.height=30;	
+				}
+				/* CODE FOR OPTIONS */			
+				getTotalImages();
+			}			
+			
+			//################ CODE FOR ALERT MESSAGE ###################
+			public function showAlertMsg():void
+			{
+				var msg:AlertMessage = new AlertMessage();				
+				msg.open(this, true);				
+				PopUpManager.centerPopUp(msg);
+			}			
+			//################ CODE FOR ALERT MESSAGE ###################
+			
+			
+			public function udpateCount(arg:String):void {					
+				var newCount:int=0;
+				var oldCount:int=parseInt(qnty_val.text);
+				if(oldCount > 0 && arg=='plus') {
+					newCount=parseInt(qnty_val.text)+1;	
+				}
+				else if(oldCount > 0 && arg=='minus') {	
+					newCount=parseInt(qnty_val.text)-1;	
+				}
+				if(newCount > 0)
+				{				
+					qnty_val.text=newCount.toString();						
+				}
+				else
+				{
+					return;
+				}				
+			}
+			
+				
+			
+			
+			//################ CODE FOR IMAGE SLIDER POPUP STARTS HERE ###################
+			[Bindable]	public var imageDP:ArrayCollection=new ArrayCollection;	
+			public function getTotalImages():void {	
+				totalImages=0;
+				var count_det:Array=getImageCount(data.itemId);		
+				if(count_det.length > 0)
+				{
+					totalImages =parseInt(count_det[0]["tot_cnt"]);
+				}
+				trace("S"+totalImages);
+			}
+			
+			protected function sliderImageHandler(event:FlexEvent,totImgCnt:int):void
+			{	
+				if(totImgCnt > 0)
+				{
+					cover1=new spark.components.Label();			
+					cover1.bottom=0;
+					cover1.left=0;
+					cover1.right=0;
+					cover1.setStyle("backgroundColor", 0);
+					cover1.setStyle("backgroundAlpha", .1);
+					cover1.setStyle("textAlign", "center");
+					cover1.setStyle("paddingTop", 15);
+					cover1.setStyle("fontSize", 16);
+					cover1.setStyle("fontFamily", "Arial");
+					cover1.setStyle("color", "white");
+					cover1.text="Tap to view more images";
+					cover1.buttonMode=true;
+					cover1.addEventListener(MouseEvent.CLICK, onImageClick);
+					this.item_image.addElement(cover1);
+				}	
+			}
+			private function onImageClick(evt:MouseEvent):void
+			{
+				showImageSlider(evt);
+			}
+			protected function showImageSlider(event:MouseEvent):void {	
+				var slider:ImageSlider = new ImageSlider();
+				slider.item_id=data.itemId;
+				slider.open(this, true); 
+				slider.x = 550 ;
+				slider.y =  300 ;
+				//PopUpManager.centerPopUp(slider);
+			}
+			
+			
+			private function showGallery(totImgCnt:int):void
+			{
+				if(totImgCnt > 0)
+				{
+					var slider:ImageSlider = new ImageSlider();
+					slider.item_id=data.ITEM_ID;
+					slider.open(this, true); 
+					slider.x = 550 ;
+					slider.y =  300 ;
+					//PopUpManager.centerPopUp(slider);
+				}  
+				else
+					return;
+			}			
+			
+			//################ CODE FOR IMAGE SLIDER POPUP ENDS HERE ###################
+			
+			
+			public function setSpicyOption(evt:Event):void{		
+				spicyOptStr="";
+				if(parseInt(data.spicyOpt)==0){
+				spicyOptStr="SPICY-"+spicy_opt.selectedItem.optVal;
+				}
+			}
+			
+			/* private function handleSpicyOption(event:ItemClickEvent):void {
+			
+			} */
+			private function handleSaltOption(event:ItemClickEvent):void 
+			{			
+				saltOptStr="";
+				if(parseInt(data.saltOpt)==0){
+				saltOptStr="SALT-"+event.currentTarget.selectedValue;
+				}
+			}
+			private function handleSugarOption(event:ItemClickEvent):void 
+			{		
+				sugarOptStr="";
+				if(parseInt(data.sugarOpt)==0){
+				sugarOptStr="SUGAR-"+event.currentTarget.selectedValue;
+				}
+			}	
+			
+			//SQLITE Coding
+			public function openConnection():SQLConnection
+			{
+				var dbFile:File = File.applicationDirectory.resolvePath("dinerpad.db");				
+				var conn:SQLConnection=new SQLConnection();  
+				try
+				{					
+					conn.open(dbFile);					
+				}
+				catch(err:Error)
+				{					
+					trace(ObjectUtil.toString(err));
+					return null;
+				}	
+				return conn;
+			}
+			
+			public function getImageCount(item_id:int):Array
+			{						
+				var conn:SQLConnection = openConnection(); 
+				selectStmt = new SQLStatement();
+				selectStmt.sqlConnection = conn;
+				var modeSql:String = "SELECT count(*) as tot_cnt FROM tbl_item_images WHERE ITEM_ID="+item_id;				
+				selectStmt.text = modeSql;				
+				try
+				{
+					selectStmt.execute();					
+					trace("Success");
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return null;
+				}	
+				var result:SQLResult = selectStmt.getResult();
+				if(result!=null)
+					return result.data;
+				else
+					return null;
+			}
+			//################### CODE TO FETCH IMAGES #################
+			
+			
+			//################### OTHER FUNCIONS ##################
+			
+			private function enableKeyListeners():void {
+				NativeApplication.nativeApplication.addEventListener(KeyboardEvent.KEY_DOWN, keyDown);
+			}
+			
+			private function destroyKeyListeners():void {
+				NativeApplication.nativeApplication.removeEventListener(KeyboardEvent.KEY_DOWN, keyDown);
+			}
+			
+			protected function keyDown(e:KeyboardEvent):void {
+				if (e.keyCode == Keyboard.BACK) back();
+			}
+			
+			protected function goBack(event:MouseEvent):void
+			{
+				back();
+				FlexGlobals.topLevelApplication.types.visible=true;
+			}
+			
+			private function back():void {
+				destroyKeyListeners();
+				FlexGlobals.topLevelApplication.detailView.popView();				
+			}
+			
+			//################### OTHER FUNCIONS ##################	
+			
+			public function submitOrder(item_id:int,item_name:String,item_price:String,item_qnty:String):void
+			{
+				var optionStr:Array=new Array;
+				if(spicyOptStr!='')
+				optionStr.push(spicyOptStr);
+				if(sugarOptStr!='')
+				optionStr.push(sugarOptStr);
+				if(saltOptStr!='')
+				optionStr.push(saltOptStr);
+				FlexGlobals.topLevelApplication.addToOrderList(item_id,item_name,item_price,item_qnty,optionStr.join(","));
+			}
+			
+			
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<!--<s:RadioButtonGroup id="spicy" itemClick="handleSpicyOption(event);"/>-->
+		<s:RadioButtonGroup id="sugar" itemClick="handleSugarOption(event);"/>
+		<s:RadioButtonGroup id="salt"  itemClick="handleSaltOption(event);"/>		
+	</fx:Declarations>
+	
+	<s:layout>
+		<s:VerticalLayout paddingLeft="5" paddingRight="5" paddingTop="1" paddingBottom="5"/>		
+	</s:layout>
+	
+	
+	<s:SkinnableContainer width="100%" height="100%"    backgroundColor="#444444" backgroundAlpha=".5" > 				
+		<s:Group x="12" y="536" width="372" height="108" color="#cccccc"> 				
+			<s:HGroup id="spicy_grp" visible="false" verticalAlign="middle" >
+				<s:Label text="SPICY:" width="50" paddingTop="10"/>
+				<s:ButtonBar requireSelection="true" width="220" click="setSpicyOption(event)"  id="spicy_opt"  >
+					<s:dataProvider>
+						<s:ArrayList>
+							<fx:Object label=""  optVal="low"
+									   icon="@Embed('assets/normal.png')" />
+							<fx:Object label=""  optVal="medium"
+									   icon="@Embed('assets/medium.png')" />
+							<fx:Object label=""  optVal="high"
+									   icon="@Embed('assets/high.png')" />
+						</s:ArrayList>
+					</s:dataProvider> 							
+				</s:ButtonBar>	
+			</s:HGroup>				
+			
+			<s:HGroup id="sugar_grp" visible="false" x="0" y="33">
+				<s:Label text="SUGAR:" width="100" paddingTop="10"/>
+				<s:RadioButton group="{sugar}"   value="low" label="low" width="100"/>
+				<s:RadioButton group="{sugar}"   value="medium" label="medium" width="100"  selected="true"/>
+				<s:RadioButton group="{sugar}"   value="high" label="high" width="100"/>
+			</s:HGroup>
+			
+			<s:HGroup id="salt_grp" visible="false" x="0" y="65">
+				<s:Label text="SALT:" width="100" paddingTop="10"/>
+				<s:RadioButton group="{salt}"    value="low" label="low" width="100"/>
+				<s:RadioButton group="{salt}"    value="medium" label="medium" width="100"  selected="true"/>
+				<s:RadioButton group="{salt}"    value="high" label="high" width="100"/>
+			</s:HGroup>					
+		</s:Group>	
+		
+		
+		
+		<s:SkinnableContainer top="0" left="0" right="0" height="40" backgroundAlpha=".5"
+							  backgroundColor="#333333">
+			<s:Button id="back_btn" x="13" verticalCenter="0"  height="30" label="Back" click="goBack(event)"/>					
+			<s:Label  horizontalCenter="0" verticalCenter="0" color="#cccccc" fontSize="24" fontWeight="bold" text="{data.itemName}"/>					
+		</s:SkinnableContainer>
+		
+		<s:Button id="order_btn"  bottom="17"  width="192" height="62" label="Add to List"
+				  click="submitOrder(data.itemId,data.itemName,data.itemPrice,qnty_val.text)"
+				  horizontalCenter="0"/>			
+	
+		<s:BorderContainer top="45" left="10"   width="410" height="410" id="item_image"  cornerRadius="4"
+						   creationComplete="sliderImageHandler(event,2)">
+			<s:Image  width="100%" height="100%"   source="{data.largeImage}" click="showGallery(totalImages)" />
+		</s:BorderContainer>
+		
+		
+		<s:Label left="10" y="479" text="Qty" color="#cccccc" fontSize="18"/>
+		<s:Group x="71" y="461" width="150" height="56">
+			<s:Button label="-" width="45" height="55"  color="#d8ff00" click="udpateCount('minus')" 
+					  skinClass="skins.plusMinusButt" />					
+			<s:Label id="qnty_val" x="70" width="20" fontSize="16" text="1" color="#cccccc"
+					 verticalCenter="0"/>
+			<s:Button x="102" y="0" width="45" height="55" label="+"
+					  click="udpateCount('plus')" color="#d8ff00"
+					  skinClass="skins.plusMinusButt"/>
+		</s:Group>	
+		
+		<s:Label x="417" y="479"  color="#cccccc" fontSize="18"  text="${data.itemPrice}"/> 				
+		<s:Label    maxDisplayedLines="-1"  top="137" left="458" right="10"  height="129" text="{data.itemDesc}"  color="#cccccc"   styleName="mystyle"/>
+				
+	</s:SkinnableContainer>	
+</s:View>

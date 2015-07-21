@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Skin
+		xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		width="60" height="33" contentBackgroundAlpha="0">
+
+	<fx:Metadata>
+		[HostComponent("spark.components.Button")]
+	</fx:Metadata>
+
+	<s:states>
+		<s:State name="up" />
+		<s:State name="over" />
+		<s:State name="down" />
+		<s:State name="disabled" />
+	</s:states>
+	
+	<!-- bg -->
+	
+	<s:SkinnableContainer width="60" height="33" backgroundAlpha="0" contentBackgroundAlpha="0">
+		<s:Label x="8" y="10" color="0xCCFF33" text="Orders"
+				 x.up="8" y.up="6"/>
+	</s:SkinnableContainer>
+	
+	
+<!--	<s:Path data="M 0,12 L 0,7 C 0,3 3,0 7,0 L 25,0 C 29,0 32,3 32,7 L 32,12 Z"
+			width="42" height="22">
+		<s:fill>
+			<s:SolidColor color="#CCCCCC" />
+		</s:fill>
+	</s:Path>
+-->
+	<!-- button -->
+	<!--<s:Path  data="M 0,10 L 0,6 C 0,2 2,0 6,0 L 20,0 C 24,0 26,2 26,6 L 26,10 Z"
+			x="8" y="5">
+		<s:fill>
+			<s:SolidColor color="#444444" color.over="#666666" color.down="#666699" />
+		</s:fill>
+	</s:Path>-->
+	<!-- arrow -->
+	<!--	<s:Path data="M 10,0 L 16,6 4,6 Z"
+		x="11" y="7">
+		<s:fill>
+			<s:SolidColor color="#EEEEEE" color.over="#99CCFF" color.down="#77AAFF" />
+		</s:fill>
+	</s:Path>-->
+	
+</s:Skin>

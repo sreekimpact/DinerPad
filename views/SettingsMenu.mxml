@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 		
+		xmlns:s="library://ns.adobe.com/flex/spark" 
+		xmlns:mx="library://ns.adobe.com/flex/mx" actionBarVisible="false"
+		title="Menu"    backgroundAlpha="0" >
+	
+	
+	<fx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.core.FlexGlobals;
+			import mx.events.IndexChangedEvent;
+			
+			import spark.events.IndexChangeEvent;
+			import mx.utils.ObjectUtil;
+			import mx.utils.StringUtil;
+			import mx.utils.ArrayUtil;
+			
+			[Bindable]
+			public var settingsMenuDP:ArrayCollection = new ArrayCollection([{label:"Table", value:1}]);
+			
+			
+			import spark.components.SplitViewNavigator;
+			import spark.components.ViewNavigator;
+			[Bindable] public var filterItemDP:ArrayCollection=new ArrayCollection;		
+			//################ CODE FOR FETCHING MENU ITEMS  Starts HERE ###################			
+			protected function menu_changeHandler(e:IndexChangeEvent):void {                
+				var optionId:int=e.currentTarget.selectedItem.value; 
+				if(optionId==1)
+				FlexGlobals.topLevelApplication.showSettingsOption1();				
+			} 
+			
+			//################ CODE FOR SQLITE Functions Starts HERE ###################		
+			private var conn:SQLConnection;
+			private var dbFile:File;
+			private var createStmt:SQLStatement;
+			private var createStatusStmt:SQLStatement;
+			private var selectStmt:SQLStatement;
+			
+			public function getQueryResults(query:String):ArrayCollection
+			{
+				dbFile = File.applicationDirectory.resolvePath("dinerpad.db");				
+				conn = new SQLConnection();         
+				try
+				{					
+					conn.open(dbFile);
+				}
+				catch(err:Error)
+				{					
+					trace(ObjectUtil.toString(err));
+					return null;
+				}				
+				selectStmt = new SQLStatement();
+				selectStmt.sqlConnection = conn;
+				//var sql:String = "SELECT id, category as catName, description as catDesc FROM tbl_category";
+				selectStmt.text = query;				
+				try
+				{
+					selectStmt.execute();
+					trace("asdsd:");
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return null;
+				}
+				var result:SQLResult = selectStmt.getResult();	
+				return new ArrayCollection( ArrayUtil.toArray(result.data));		
+			}
+			//################ CODE FOR SQLITE Functions Ends HERE ###################			
+			//################ CODE FOR FETCHING MENU ITEMS  Ends HERE ###################		
+		]]>
+	</fx:Script>	
+	
+	<s:layout>
+		<s:VerticalLayout horizontalAlign="center" paddingLeft="5" paddingRight="5" paddingTop="1" paddingBottom="5" />	
+		
+	</s:layout>
+	
+	<s:List id="settings_menu"  dataProvider="{settingsMenuDP}"  color="#333333" itemRenderer="comps.CustomSettingsSkin" width="100%"  height="100%"   change="menu_changeHandler(event);" />
+
+</s:View>

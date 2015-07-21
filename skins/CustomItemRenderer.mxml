@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- http://blog.flexexamples.com/2010/04/06/creating-a-semi-transparent-item-renderer-on-a-spark-list-control-in-flex-4/ -->
+<s:ItemRenderer name="CustomItemRenderer"
+				xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				xmlns:s="library://ns.adobe.com/flex/spark" 
+				xmlns:mx="library://ns.adobe.com/flex/mx" 
+				autoDrawBackground="false">
+	<s:states>
+		<s:State name="normal" />
+		<s:State name="hovered" />
+		<s:State name="selected" />
+	</s:states>
+	
+	<s:Rect left="0" right="0" top="0" bottom="0"
+			includeIn="hovered,selected">
+		<s:fill>
+			<s:SolidColor color="haloBlue"
+						  alpha="0.4" alpha.selected="0.6" />
+		</s:fill>
+	</s:Rect>
+	
+	<s:Label text="{data.label}"
+			 left="2" right="2" top="4" bottom="4" />
+	
+</s:ItemRenderer>

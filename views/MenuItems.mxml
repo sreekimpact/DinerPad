@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 		
+		xmlns:s="library://ns.adobe.com/flex/spark" 
+		xmlns:mx="library://ns.adobe.com/flex/mx" actionBarVisible="false"
+		title="Menu"    backgroundAlpha="0"   
+	 
+		creationComplete="initApp(event);">
+	
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		s|List#menu {
+			 
+		}	
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			import alert.AlertMessage;
+			
+			import flash.data.SQLConnection;
+			import flash.data.SQLResult;
+			import flash.data.SQLStatement;
+			import flash.errors.SQLError;
+			import flash.events.MouseEvent;
+			import flash.filesystem.File;
+			
+			import mx.collections.ArrayCollection;
+			import mx.core.FlexGlobals;
+			import mx.events.FlexEvent;
+			import mx.events.ItemClickEvent;
+			import mx.managers.PopUpManager;
+			import mx.messaging.ChannelSet;
+			import mx.messaging.channels.AMFChannel;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.rpc.remoting.RemoteObject;
+			import mx.utils.ArrayUtil;
+			import mx.utils.ObjectUtil;
+			import mx.utils.StringUtil;
+			
+			import spark.components.SplitViewNavigator;
+			import spark.components.ViewNavigator;
+			import spark.events.IndexChangeEvent;		
+			
+			private var conn:SQLConnection;
+			private var dbFile:File;
+			private var createStmt:SQLStatement;
+			private var createStatusStmt:SQLStatement;
+			private var insertStmt:SQLStatement;
+			private var selectStmt:SQLStatement;
+			
+			
+			[Bindable] public var menuDP:ArrayCollection=new ArrayCollection;
+			[Bindable] public var itemDP:ArrayCollection=new ArrayCollection;			
+		
+			private function initApp(e:FlexEvent):void {
+				loadMenus();
+			}						
+			
+			//################ CODE FOR FETCHING MENUS ###################	
+			public function loadMenus():void {
+				/*
+				var sql:String = " SELECT DISTINCT(C.CATEGORY_ID) AS catId,C.CATEGORY AS catName,C.DESCRIPTION AS catDesc,C.THUMB_IMAGE as icon "+
+					" FROM tbl_loc_item_map A "+
+					" INNER JOIN tbl_item B "+
+					" INNER JOIN tbl_category C "+
+					" WHERE A.ITEM_ID=B.ITEM_ID AND B.CATEGORY_ID=C.CATEGORY_ID "+
+					" AND A.LOCATION_ID="+FlexGlobals.topLevelApplication.locationId+" AND A.ACTIVE_STATUS=1 AND A.DEL_STATUS=0  ";
+				*/
+				var sql:String = " SELECT A.CATEGORY_ID AS catId,A.ORDERING AS ordering,B.CATEGORY AS catName,B.DESCRIPTION AS catDesc,B.THUMB_IMAGE as icon "+
+					" FROM tbl_loc_cat_map A  INNER JOIN tbl_category B  WHERE  A.CATEGORY_ID=B.CATEGORY_ID "+
+					" AND A.ACTIVE_STATUS=1 AND A.DEL_STATUS=0 AND A.LOCATION_ID="+FlexGlobals.topLevelApplication.locationId+" ORDER BY A.ORDERING ASC ";
+				//trace(sql);
+				menuDP = getQueryResults(sql);	
+				
+				for each(var item:Object in menuDP)
+				{					
+				  var dups:Array=checkDups(item.catId,conn,"tbl_loc_item_map",'MAP_ID');
+				  var dup:int=parseInt(dups[0]["cnt"]);
+				  //trace("DUP:"+dup);
+				  if(dup > 0){
+					  item.status=true;
+				  }else{
+					  item.status=false;
+				  }
+				}
+				
+				if(menuDP.length > 0)
+				{
+					cat_menu.selectedIndex=0;
+					var obj:Object=menuDP.getItemAt(0);
+					//trace("SSSSSSSS"+obj.catId);
+					loadInitialCatItems(obj.catId);
+					cat_menu.addEventListener(ItemClickEvent.ITEM_CLICK, menu_changeHandler);
+				    clearItemTypeSelections();
+				}
+				else{
+					return;
+				}
+			}		
+			//################ CODE FOR FETCHING MENU ENDS HERE ###################				
+	 
+			
+			public  function loadInitialCatItems(catid:int):void {	
+				FlexGlobals.topLevelApplication.categoryId=catid;						
+				seperate();
+			} 	
+			
+			//################ CODE FOR FETCHING MENU ITEMS  Starts HERE ###################			
+			protected function menu_changeHandler(e:Event):void {			            
+				var catid:String=e.currentTarget.selectedItem.catId;  
+				FlexGlobals.topLevelApplication.categoryId=catid;
+				FlexGlobals.topLevelApplication.types.visible=true;
+				seperate();	
+			} 	
+			
+			public function seperate():void
+			{
+				var sql:String = " SELECT A.LOCATION_ID as locId,A.ITEM_ID as itemId,A.ITEM_PRICE as itemPrice, "+
+					" A.ORDERING as currOrder,B.ITEM_NAME as itemName,B.ITEM_DESC as itemDesc,B.ITEM_TYPE as itemType,"+
+					" B.SPICY_OPT as spicyOpt,B.SUGAR_OPT as sugarOpt,B.SALT_OPT as saltOpt "+
+					" FROM tbl_loc_item_map A INNER JOIN tbl_item B WHERE A.ITEM_ID=B.ITEM_ID "+
+					" AND A.LOCATION_ID="+FlexGlobals.topLevelApplication.locationId+" AND B.CATEGORY_ID="+FlexGlobals.topLevelApplication.categoryId+
+					" AND A.DEL_STATUS=0 AND A.ACTIVE_STATUS=1 ORDER BY A.ORDERING ASC";	
+				trace(sql);	
+				itemDP = getQueryResults(sql);  
+				for each(var item:Object in itemDP)
+				{					
+					var image_det:Array=getItemImage(item.itemId);
+					//item.itemImage=getItemImage(item.itemId);
+					if(image_det!=null && image_det.length > 0)
+					{
+						item.thumbImage=StringUtil.trim(image_det[0]["THUMB_PATH"]);	
+						item.largeImage=FlexGlobals.topLevelApplication.imagePath+"item/large/"+StringUtil.trim(image_det[0]["LARGE_PATH"]);						
+					}	
+				}
+				
+				var splitNavigator:SplitViewNavigator = navigator.parentNavigator as SplitViewNavigator;
+				var detailNavigator:ViewNavigator = splitNavigator.getViewNavigatorAt(1) as ViewNavigator;
+				splitNavigator.hideViewNavigatorPopUp();
+				//trace("HELLOBBBBBBBBB "+FlexGlobals.topLevelApplication.itemTypeFilterEnabled);
+				if(FlexGlobals.topLevelApplication.itemTypeFilterEnabled==0)
+				{					
+					data = itemDP;					         
+					detailNavigator.pushView(ItemsTileView,data);
+				}
+				else if(FlexGlobals.topLevelApplication.itemTypeFilterEnabled==1)
+				{
+					FlexGlobals.topLevelApplication.displayItemsDP.removeAll();
+					FlexGlobals.topLevelApplication.displayItemsDP.refresh();
+					for each(var item:Object in itemDP)
+					{
+						var temp_array:Array=new Array;					
+						if(item.itemType!=null && item.itemType!='')
+						{
+							var temp_type:String=item.itemType;
+							temp_array=temp_type.split(",");
+							for (var j:int = 0; j< temp_array.length; j++){								
+								if(in_array(temp_array[j],FlexGlobals.topLevelApplication.selectedItemTypes)) 
+								{								
+									var x:int=getItemIndexByProperty(FlexGlobals.topLevelApplication.displayItemsDP,"itemId",item.itemId);								
+									if(x==-1)
+									{
+										FlexGlobals.topLevelApplication.displayItemsDP.addItem(item);
+									}
+								}
+								else{
+									//trace("Do Nothing");
+								}						
+							}						
+						}					
+					}//End of For Loop	
+					data = FlexGlobals.topLevelApplication.displayItemsDP;					         
+					detailNavigator.pushView(ItemsTileView,data);					
+				}// End of Main Else IF			
+			}
+			//################ CODE FOR FETCHING MENU ITEMS  Ends HERE ###################		
+			
+			
+			
+			//################ CODE FOR SQLITE Functions Starts HERE ###################				
+			public function getQueryResults(query:String):ArrayCollection
+			{
+				dbFile = File.applicationDirectory.resolvePath("dinerpad.db");				
+				conn = new SQLConnection();         
+				try
+				{					
+					conn.open(dbFile);
+				}
+				catch(err:Error)
+				{					
+					trace(ObjectUtil.toString(err));
+					return null;
+				}				
+				selectStmt = new SQLStatement();
+				selectStmt.sqlConnection = conn;
+				//var sql:String = "SELECT id, category as catName, description as catDesc FROM tbl_category";
+				selectStmt.text = query;				
+				try
+				{
+					selectStmt.execute();
+					trace("asdsd:");
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return null;
+				}
+				var result:SQLResult = selectStmt.getResult();	
+				return new ArrayCollection( ArrayUtil.toArray(result.data));		
+			}
+			//################ CODE FOR SQLITE Functions Ends HERE ###################			
+			
+			
+			
+			//################ CODE FOR ALERT MESSAGE ###################
+			public function showAlertMsg():void
+			{
+				var msg:AlertMessage = new AlertMessage();				
+				msg.open(this, true);				
+				PopUpManager.centerPopUp(msg);
+			}			
+			//################ CODE FOR ALERT MESSAGE ###################
+			
+			
+			public static function in_array( needle:String, haystack:Array ):Boolean {
+				for( var a:int = 0; a < haystack.length; a++ ) {
+					if( haystack[a] == needle ) {
+						return true;
+					}else if( haystack[a] is Array ) {
+						return in_array(needle, haystack[a]);
+					}
+				}
+				return false;
+			}
+			
+		
+			static public function getItemIndexByProperty(array:ArrayCollection, property:String, value:String):Number
+			{				
+				for (var i:Number = 0; i < array.length; i++)
+				{
+					var obj:Object = Object(array[i])					
+					if (obj[property] == value)
+						return i;
+				}
+				return -1;
+			}
+			
+			
+					
+			private var updateStmt:SQLStatement;			
+			public function openConnection():SQLConnection
+			{
+				var dbFile:File = File.applicationDirectory.resolvePath("dinerpad.db");				
+				var conn:SQLConnection=new SQLConnection();  
+				try
+				{					
+					conn.open(dbFile);					
+				}
+				catch(err:Error)
+				{					
+					//trace(ObjectUtil.toString(err));
+					return null;
+				}	
+				return conn;
+			}
+			
+			public function clearItemTypeSelections():void
+			{						
+				var conn:SQLConnection = openConnection(); 
+				updateStmt = new SQLStatement();
+				updateStmt.sqlConnection = conn;				
+				var updateSql:String ="";				
+				updateSql = "UPDATE tbl_itemtype SET ACTIVE_YN=0";
+				trace(updateSql);
+				updateStmt.text = updateSql;							
+				try
+				{
+					updateStmt.execute();	
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return;
+				}					
+			}
+			
+			public function getItemImage(itemId:int):Array
+			{						
+				var conn:SQLConnection = openConnection(); 
+				selectStmt = new SQLStatement();
+				selectStmt.sqlConnection = conn;
+				var modeSql:String =  "SELECT * FROM tbl_item_images WHERE ITEM_ID="+itemId+" AND DEFAULT_IMAGE=1";
+				trace(modeSql);
+				selectStmt.text = modeSql;				
+				try
+				{
+					selectStmt.execute();					
+					trace("Success");
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return null;
+				}	
+				var result:SQLResult = selectStmt.getResult();
+				if(result!=null)
+					return result.data;
+				else
+					return null;
+			}
+			
+			//##################### CHECK DUPLICATES ########################
+			public function checkDups(chk_id:int,conn:SQLConnection,tabName:String,keyColumn:String):Array
+			{	
+				selectStmt = new SQLStatement();
+				selectStmt.sqlConnection = conn;
+				var chkSql:String = "SELECT count(*) as cnt FROM "+tabName+" WHERE "+keyColumn+"='"+chk_id+"'";
+				trace(chkSql);
+				selectStmt.text = chkSql;				
+				try
+				{
+					selectStmt.execute();	
+				}
+				catch (error:SQLError)
+				{				
+					return null;
+				}	
+				var result:SQLResult= selectStmt.getResult();		
+				trace(result.data);	
+				return result.data;
+			}
+		]]>
+	</fx:Script>	
+	
+	<s:layout>
+		<s:VerticalLayout horizontalAlign="center" paddingLeft="5" paddingRight="5" paddingTop="0" paddingBottom="5" />		
+	</s:layout>
+	
+	<s:List id="cat_menu"  dataProvider="{menuDP}"  color="#333333" itemRenderer="comps.CustomListSkin" width="100%"  height="100%"/>
+
+</s:View>

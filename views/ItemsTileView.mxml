@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:View xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		xmlns:s="library://ns.adobe.com/flex/spark" 
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		xmlns:comps="comps.*" 	
+		xmlns:containers="containers.*" actionBarVisible="false"
+		creationComplete="init()"
+		title="Items"
+		backgroundAlpha="0"    contentBackgroundAlpha="0">
+	
+	<fx:Declarations>		
+		<mx:NumberFormatter id="nf" precision="2" useThousandsSeparator="false" useNegativeSign="false"/>		
+	</fx:Declarations>	
+		
+	<fx:Script>
+		<![CDATA[
+			/* Skinclass and contentBackgroundAlpha="0" of itemList makes the foreground transparent */
+			import spark.events.IndexChangeEvent;
+			import spark.components.SplitViewNavigator;
+			import spark.components.ViewNavigator;
+			import mx.events.FlexEvent;
+			import mx.core.FlexSprite;
+			import mx.core.FlexGlobals;
+			
+			
+			private var cover:spark.components.Label;
+			import spark.components.TileGroup;
+			import spark.components.Button;
+			public var myTileGroup:TileGroup;
+			
+			
+			import mx.collections.ArrayCollection;
+			import mx.core.FlexGlobals;
+			import mx.events.FlexEvent;
+			import mx.messaging.ChannelSet;
+			import mx.messaging.channels.AMFChannel;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.rpc.remoting.RemoteObject;
+			import mx.utils.ArrayUtil;
+			import mx.utils.StringUtil;
+			
+			protected function itemList_changeHandler(event:IndexChangeEvent):void
+			{
+				var splitNavigator:SplitViewNavigator = navigator.parentNavigator as SplitViewNavigator;
+				var detailNavigator:ViewNavigator = splitNavigator.getViewNavigatorAt(1) as ViewNavigator;
+				var o:Object = event.currentTarget.selectedItem;
+				detailNavigator.pushView(ItemDetailsView,event.currentTarget.selectedItem);
+			}			
+			
+			private function init():void{
+				if(FlexGlobals.topLevelApplication.orders.length > 0)
+				{
+				  FlexGlobals.topLevelApplication.order_panel.visible=true;
+				  FlexGlobals.topLevelApplication.order_panel.opened=false;
+				  FlexGlobals.topLevelApplication.subTotal.visible=true;
+				}  
+			}	
+			
+		]]>
+	</fx:Script>
+	
+	<s:layout>
+		<s:VerticalLayout horizontalAlign="center" paddingLeft="5" paddingRight="5" paddingTop="1" paddingBottom="5" />	
+		
+	</s:layout>
+	
+	<s:SkinnableContainer width="100%" height="100%"  left="8" right="8" top="8" bottom="8"  backgroundColor="#444444" backgroundAlpha=".5" >
+		
+ 			<s:List id="itemList"
+					dataProvider="{data}"
+					itemRenderer="comps.ItemsTileRenderer" 
+					horizontalCenter="0"
+					verticalCenter="0"
+					width="100%" height="100%"					
+					change="itemList_changeHandler(event)" 
+					contentBackgroundAlpha="0">				
+				<s:layout>
+					<s:TileLayout id="tileList"  paddingLeft="5"  
+								  paddingRight="5" horizontalGap="5" verticalGap="5" 
+								  columnAlign="justifyUsingWidth"/>
+				</s:layout>		
+			</s:List>	
+		
+	</s:SkinnableContainer>
+	
+	
+</s:View>

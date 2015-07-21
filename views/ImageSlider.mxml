@@ -1,0 +1,130 @@
+<s:SkinnablePopUpContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+						   xmlns:mx="library://ns.adobe.com/flex/mx" 
+						   xmlns:s="library://ns.adobe.com/flex/spark" 
+					
+						   width="450" height="410" backgroundAlpha="0"
+						   creationComplete="initPage()" xmlns:components="components.*">
+	
+	<fx:Declarations>
+		<mx:Fade id="myFade" duration="1000" />
+	</fx:Declarations>
+	
+
+	<fx:Style>
+		/* @namespace s "library://ns.adobe.com/flex/spark";
+		
+		@namespace mx "library://ns.adobe.com/flex/mx";		
+		.previousBtn{
+			upSkin:Embed("assets/style/left_up.png");
+			overSkin:Embed("assets/style/left_over.png");
+			downSkin:Embed("assets/style/left_down.png");
+		}
+		
+		.nextBtn{
+			upSkin:Embed("assets/style/right_up.png");
+			overSkin:Embed("assets/style/right_over.png");
+			downSkin:Embed("assets/style/right_down.png");
+		} */
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			[Bindable]	public var item_id:String;		
+			import mx.collections.ArrayCollection;
+			import mx.core.FlexGlobals;
+			import mx.utils.ArrayUtil;
+			import mx.utils.ObjectUtil;
+			import mx.utils.StringUtil;
+			private var selectStmt:SQLStatement;
+			private var updateStmt:SQLStatement;
+			
+
+	
+			
+			 [Embed("assets/style/left_up.png")]
+			private const leftUp:Class;
+			[Embed("assets/style/left_over.png")]
+			private const leftOver:Class;
+			[Embed("assets/style/left_down.png")]
+			private const leftDown:Class;
+			
+			
+			[Embed("assets/style/right_up.png")]
+			private const rightUp:Class;
+			[Embed("assets/style/right_over.png")]
+			private const rightOver:Class;
+			[Embed("assets/style/right_down.png")]
+			private const rightDown:Class; 
+			
+			
+			[Bindable] public var imgPath:String="";
+			private function initPage():void {	
+				imgPath=FlexGlobals.topLevelApplication.imagePath+"item/large/";
+				loadItemImages();	
+			}	
+			
+			//################ CODE FOR FETCHING ITEM IMAGES ###################
+			[Bindable]	public var imageDP:ArrayCollection=new ArrayCollection;	
+			public function loadItemImages():void {	
+				var conn:SQLConnection = parentDocument.openConnection(); 
+				selectStmt = new SQLStatement();
+				selectStmt.sqlConnection = conn;
+				var imageSql:String = "SELECT LARGE_PATH  as img_path FROM tbl_item_images WHERE ITEM_ID='"+item_id+"' AND DEFAULT_IMAGE=0 ORDER BY IMAGE_ID asc";
+				trace(imageSql);
+				selectStmt.text = imageSql;				
+				try
+				{
+					selectStmt.execute();					
+					trace("Success");
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return;
+				}	
+				var result:SQLResult = selectStmt.getResult();				
+				imageDP = new ArrayCollection( ArrayUtil.toArray(result.data));				
+			}	
+			
+		
+			[Bindable]
+			private var currentIndex : Number = 0;		
+			private function nextImage(e:MouseEvent):void{
+				if (currentIndex < imageDP.length - 1){
+					currentIndex++;
+				}
+				else {
+					currentIndex = 0;
+				}
+			}
+			
+			private function previousImage(e:MouseEvent):void{
+				if (currentIndex != 0){
+					currentIndex--;
+				}
+				else {
+					currentIndex = imageDP.length - 1;
+				}
+			}
+			//################ CODE FOR IMAGE SLIDER ENDS HERE ###################
+		]]>
+	</fx:Script>
+
+ 		<s:BorderContainer id="canvas1" width="100%" height="100%">
+		    <s:Image id="item_images" width="100%" height="100%" source="{imgPath}{imageDP.getItemAt(currentIndex).img_path}" horizontalAlign="center" verticalAlign="middle" showEffect="myFade">
+				<s:filters>
+					<s:GlowFilter alpha="0.8" color="#FFFFFF" blurX="10" blurY="10" strength="2" quality="3"/>	   				
+				</s:filters>
+			</s:Image>
+			<s:VGroup height="100%" width="100%" horizontalAlign="center">
+				<mx:Spacer height="100%" width="100%"/>
+				<s:HGroup width="100%" height="10%" horizontalAlign="center" verticalAlign="bottom">
+					<s:Button id="prevBtn" click="nextImage(event)" skinClass="skins.PreviousButton"/>
+					<s:Spacer width="50"/>
+					<s:Button id="nextBtn" click="nextImage(event)" skinClass="skins.NextButton"/>
+				</s:HGroup>				
+			</s:VGroup>
+			<s:Button top="2" right="2" label="X"  fontSize="20" fontWeight="bold" click="close();"/>			
+		</s:BorderContainer>					
+ 	
+</s:SkinnablePopUpContainer>

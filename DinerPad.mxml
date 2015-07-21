@@ -1,0 +1,741 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 	
+			   xmlns:mx="library://ns.adobe.com/flex/mx" 
+			   applicationDPI="160"				  
+			   initialize="loadSettings()"  
+			   creationComplete="initApp()"  
+			   xmlns:containers="containers.*"
+			   xmlns:comps="comps.*"	
+			   resize="resizeHandler(event);">
+	
+	<fx:Declarations>	
+		 
+		 
+		<mx:NumberFormatter id="nf" precision="2" useThousandsSeparator="false" useNegativeSign="false"/>	
+	</fx:Declarations>	
+	
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";			
+		s|Label.tableNo
+		{
+			color: #CCCCCC;
+			fontSize: 16;
+			fontFamily: "Comic Sans MS";
+		}	
+		
+		
+		s|Button {
+			baseColor: red;
+			 
+		}
+	</fx:Style>
+	
+	
+	
+	
+	
+	
+	<fx:Script>
+		<![CDATA[	
+			import alert.AlertMessage;
+			import alert.DuplicateAlert;
+			import alert.ModeSelection;
+			import alert.OptionsPage;
+			import alert.SettingsPage;
+			import alert.StatusAlert;
+			import alert.SyncAlert;
+			
+			import app.mapping.BillDetails;
+			import app.mapping.Orders;
+			
+			import mx.collections.ArrayCollection;
+			import mx.core.FlexGlobals;
+			import mx.events.FlexEvent;
+			import mx.events.ResizeEvent;
+			import mx.managers.PopUpManager;
+			import mx.messaging.ChannelSet;
+			import mx.messaging.channels.AMFChannel;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.rpc.remoting.RemoteObject;
+			import mx.utils.ArrayUtil;
+			import mx.utils.ObjectUtil;
+			import mx.utils.StringUtil;
+			
+			import views.ItemsTileView;
+			import views.MenuItems;
+			import views.SettingsMenu;
+			import views.SettingsOption1;		
+			import spark.components.TileGroup;
+			import spark.components.Button;
+			import mx.core.FlexGlobals;	
+			
+			
+			public var myTileGroup:TileGroup;
+			private var cover:spark.components.Label;
+			private var selectStmt:SQLStatement;
+			private var updateStmt:SQLStatement;
+			
+			//Global Variables			
+			public var orders:ArrayCollection = new ArrayCollection();
+			public var orderDisplay:ArrayCollection = new ArrayCollection();	
+			public var sub_total:Number = 0.00; 		
+			public var orderTable:String = ""; 	
+			public var channel:AMFChannel;
+			public var channelSet:ChannelSet;
+			public var testChannel:AMFChannel;
+			public var testChannelSet:ChannelSet;
+			public var prefixUrl:String;
+			public var GatewayUrl:String;	
+			public var amfphp_gateway:String;
+			public var gatewayStatus:int;
+			public var categoryId:int=1;	
+			public var locationId:int=0;			
+			public var svdTax:Number = 0.00;	
+			[Bindable]public var svdTableno:String ="T-1";	
+			public var totTables:int = 35;			
+			public var itemLastId:int=0;
+			public var catLastId:int=0;	
+			public var waitLastId:int=0;	
+			public var locLastId:int=0;	
+			public var locCatMapLastId:int=0;
+			public var locItemMapLastId:int=0;
+			public var itemTypeLastId:int=0;	
+			public var itemImageLastId:int=0;	
+			[Bindable]public var netStatus:int=0;	
+			public var selectedItemTypes:Array=new Array;// For Item Types	
+			public var displayItemsDP:ArrayCollection=new ArrayCollection();	
+			public var itemTypeFilterEnabled:int=0;	
+			public var imagePath:String="";	
+		
+			
+			//############# LOADING GATEWAY CONFIGURATIONS FROM SQL FILE ##############		
+			public function loadSettings():void {
+				settings.visible=true;
+				var settings_det:Array=getSettingsDetails();	
+				if(settings_det!=null && settings_det.length > 0)
+				{
+					prefixUrl=StringUtil.trim(settings_det[0]["GATEWAY"]);	
+					GatewayUrl=prefixUrl+"messagebroker/amf";
+					locationId=parseInt(StringUtil.trim(settings_det[0]["TAB_LOC"]));	
+					imagePath=StringUtil.trim(settings_det[0]["IMG_PATH"]);
+					catLastId=parseInt(StringUtil.trim(settings_det[0]["CATEGORY"]));
+					itemLastId=parseInt(StringUtil.trim(settings_det[0]["ITEM"]));	
+					itemTypeLastId=parseInt(StringUtil.trim(settings_det[0]["ITEM_TYPE"]));	
+					itemImageLastId=parseInt(StringUtil.trim(settings_det[0]["ITEM_IMAGE"]));					
+					locCatMapLastId=parseInt(StringUtil.trim(settings_det[0]["LOC_CAT_MAP"]));	
+					locItemMapLastId=parseInt(StringUtil.trim(settings_det[0]["LOC_ITEM_MAP"]));					
+					locLastId=parseInt(StringUtil.trim(settings_det[0]["LOCATION"]));	
+					waitLastId=parseInt(StringUtil.trim(settings_det[0]["WAITER"]));	
+					totTables=parseInt(StringUtil.trim(settings_det[0]["TABLES"]));	
+					svdTax=Number(StringUtil.trim(settings_det[0]["TAX"]));	
+					svdTableno=StringUtil.trim(settings_det[0]["TABLENO"]);		
+				}
+				//SETTING THE CHANNELS
+				channel= new AMFChannel("my-amf", GatewayUrl);
+				channelSet = new ChannelSet();
+				channelSet.addChannel(channel);
+				gatewayCheck();				
+			}
+			
+			//################ SYNC FUNCTIONS STARTS HERE  ###################	
+			public var ro4:RemoteObject;
+			public function gatewayCheck():void {			
+				ro4 = new RemoteObject();
+				ro4.channelSet = channelSet;
+				ro4.destination = "dest_synchronize";
+				ro4.addEventListener(ResultEvent.RESULT,GatewayCheckResultHandler);
+				ro4.addEventListener(FaultEvent.FAULT, GatewayCheckFaultHandler);				
+				ro4.checkGateway();				
+			}				
+			private function GatewayCheckResultHandler(event:ResultEvent):void{	
+				var res:String=event.result.toString();
+				netStatus=parseInt(res);	
+				if(netStatus==1) {
+					syncAlert();//For Synchronize Popup
+					//loadImage();
+				}	
+				ro4.removeEventListener(ResultEvent.RESULT, GatewayCheckResultHandler); // Removing Listener
+			}		
+			private function GatewayCheckFaultHandler(fault:FaultEvent):void
+			{	
+				netStatus=0;
+				connectionAlert();
+				ro4.removeEventListener(FaultEvent.FAULT, GatewayCheckFaultHandler); // Removing Listener
+			}	
+			
+			 
+			
+			public function syncAlert():void
+			{
+				var sync:SyncAlert=new SyncAlert();
+				sync.gateway=GatewayUrl;
+				sync.catLastId=catLastId;
+				sync.itemLastId=itemLastId;
+				sync.locLastId=locLastId;
+				sync.waitLastId=waitLastId;
+				sync.itemTypeLastId=itemTypeLastId;
+				sync.itemImageLastId=itemImageLastId;				
+				sync.locCatMapLastId=locCatMapLastId;	
+				sync.locItemMapLastId=locItemMapLastId;					
+				sync.open(this, true);				
+				PopUpManager.centerPopUp(sync);
+			}	
+			
+			public function getSettingsDetails():Array
+			{						
+				var conn:SQLConnection = openConnection(); 
+				selectStmt = new SQLStatement();
+				selectStmt.sqlConnection = conn;
+				var modeSql:String =  "SELECT * FROM tbl_synchronize WHERE SYNC_ID=1";
+				selectStmt.text = modeSql;				
+				try
+				{
+					selectStmt.execute();					
+					trace("Success");
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return null;
+				}	
+				var result:SQLResult = selectStmt.getResult();
+				if(result!=null)
+					return result.data;
+				else
+					return null;
+			}
+			//################### CODE TO FETCH GATEWAY #################				
+			
+			private function initApp():void {				
+				if(orders.length > 0)
+				{
+					order_panel.visible=true;
+					order_panel.opened=false;
+					subTotal.visible=true;
+				}				
+			}	
+			
+			//################ FUNCTION FOR OPENING SPLASH SCREEN ###################
+			public function openSplashPage():void
+			{							
+				//clearNavigators();	
+				//trace("asdsad");
+				refreshMainView();
+				splitNavigator.visible=false;
+				thankyou_screen.visible=false;
+				order_panel.visible=false;	
+				home.visible=false;	
+				types.visible = false;
+				order_alert.visible=false;
+				orders.removeAll();orders.refresh();		
+				orderDisplay.removeAll();orderDisplay.refresh();		
+				splash_screen.visible=true;	
+				types.visible=false;
+				options.visible=false;
+				settings.visible=true;
+				
+				
+				clearItemTypeSelections();
+				FlexGlobals.topLevelApplication.itemTypeFilterEnabled=0;
+				refreshCategories();
+			}
+			//################ FUNCTION FOR OPENING SPLASH SCREEN ENDS HERE ###################
+			
+			
+			
+			//################ FUNCTION FOR INNER APPLICATION SCREEN ###################
+			public function openMainPage():void
+			{				
+				options.visible=true;
+				settings.visible=false;
+				splash_screen.visible=false;
+				thankyou_screen.visible=false;
+				order_alert.visible=false;
+				final_order_list.visible=false;
+				if(orders.length > 0 )
+					order_panel.visible=true;
+				else
+					order_panel.visible=false;	
+				home.visible=true;	
+				types.visible = true;
+				splitNavigator.enabled=true;
+				splitNavigator.visible=true;	
+				
+				
+			}	
+			
+			public function clearItemTypeSelections():void
+			{						
+				var conn:SQLConnection = openConnection(); 
+				updateStmt = new SQLStatement();
+				updateStmt.sqlConnection = conn;				
+				var updateSql:String ="";				
+				updateSql = "UPDATE tbl_item_types SET curr_status=0";
+				trace(updateSql);
+				updateStmt.text = updateSql;							
+				try
+				{
+					updateStmt.execute();	
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return;
+				}	
+			}
+			//################ FUNCTION FOR THANK YOU PAGE AFTER ORDERING ITEMS ###################
+			public function openThanksPage():void
+			{					
+				splash_screen.visible=false;
+				splitNavigator.visible=false;
+				order_panel.visible=false;
+				home.visible=false;
+				types.visible = false;
+				//mode.visible=false;
+				order_alert.visible=false;
+				thankyou_screen.visible=true;				
+				final_order_list.visible=true;
+				options.visible = false;
+ 			}
+			
+			//################ FUNCTION FOR THANK YOU PAGE AFTER ORDERING ITEMS ENDS HERE  ###################	
+			
+			
+			//################ CODE FOR ADDING ITEMS TO ORDER LIST STARTS HERE   ###################		
+			public function addToOrderList(itemId:int,item:String,price:String,enteredQnty:String,optionDetails:String):void {				
+				var x:int=getItemIndexByProperty(orders,"itemId",itemId.toString());		
+				if(x==-1)
+				{
+					var entered_qnty:Number=Number(enteredQnty);
+					var item_price:Number=Number(price);					
+					var tot_price:Number=entered_qnty*item_price;	
+					var opt_details:String=StringUtil.trim(optionDetails.toString());
+					if(StringUtil.trim(opt_details)=='') {
+						opt_details="";
+					}				
+					order_list.dataProvider.addItem(
+						{
+							"itemId": itemId,		
+							"itemName": item,								
+							"itemQuantity": entered_qnty.toString(),
+							"itemPrice": item_price.toString(),
+							"totalPrice": tot_price.toString(),							
+							"optionDetails": opt_details
+						});
+					calculateTotal();	
+				}
+				else
+				{	
+					duplicateAlert();	
+					return;
+				}
+				order_panel.visible=true;
+				order_panel.opened=true;	
+				subTotal.visible=true;
+			} 
+			//################ CODE FOR ADDING ITEMS TO ORDER LIST STARTS HERE ENDS HERE ###################			
+			
+			
+			//################ CODE FOR CALCULATING TOTAL AMOUNT STARTS HERE ###################				
+			public function calculateTotal():void {			
+				sub_total=0.00;		
+				for each (var row:Object in order_list.dataProvider) {						
+					var q:Number=Number(nf.format(row.totalPrice));						
+					FlexGlobals.topLevelApplication.sub_total += q;		
+				}
+				//sub_total.text=nf.format(subtotal.toString());
+				
+				//tax_value.text=nf.format(taxValue.toString());
+				var taxAmnt:Number=((sub_total*svdTax)/100);				
+				var totAfterTax:Number=(sub_total+taxAmnt);
+				sub_total=totAfterTax;
+				//subTotal.text="Total: "+nf.format(sub_total.toString())+" (" +orders.length+" Items)";
+				subTotal.text="(" +orders.length+" Items)";
+				total_inAlert.text =nf.format(sub_total.toString());
+			}
+			//################ CODE FOR CALCULATING TOTAL AMOUNT STARTS ENDS HERE ###################	
+			
+			
+			//################ CODE FOR ORDER SUBMISSION ALERT & CANCEL ORDER STARTS HERE ###################					
+			
+			public function orderAlert():void{				
+				splitNavigator.enabled=false;				
+				set_table.visible=false;					
+				FlexGlobals.topLevelApplication.order_panel.opened=false;
+				if(orders.length > 0)
+				{
+					order_alert.visible=true;
+					final_order_list.visible=true;
+					final_order_list.dataProvider=order_list.dataProvider;
+				}		
+			}
+			
+			public function cancelOrder():void{		
+				order_alert.visible=false;
+				splitNavigator.enabled=true;
+				final_order_list.visible=false;
+			}
+			
+			public function duplicateAlert():void
+			{
+				var msg:DuplicateAlert = new DuplicateAlert();				
+				msg.open(this, true);				
+				PopUpManager.centerPopUp(msg);
+			}
+			//################ CODE FOR ORDER SUBMISSION ALERT & CANCEL ORDER ENDS HERE ###################		
+			
+			
+			//################ CODE FOR FINAL ORDER SUBMISSION TO SERVER STARTS HERE ###################			
+			public var ro2:RemoteObject;
+			public function orderItems():void{	
+				ro2 = new RemoteObject();
+				ro2.channelSet = channelSet;
+				ro2.destination = "dest_orders";
+				ro2.addEventListener(ResultEvent.RESULT, ItemResultHandler);
+				ro2.addEventListener(FaultEvent.FAULT, ItemFaultHandler);					
+				//ro2.placeOrder(locationId,waiterId,StringUtil.trim(curr_table.text),orders,getCurrentDate());	
+				var ord:Orders=new Orders;
+				ord.appType="W";
+				ord.orderType='K';
+				ord.OrderStatus=1;
+				ord.locationId=locationId;
+				ord.waiterId=1;
+				ord.orderTime=getCurrentDate();
+				ord.tableNumber=svdTableno;	
+				if(orders.length > 0){
+				  ro2.placeOrder(orders,ord);	
+				}
+				else{
+					return;
+				}
+			}
+			
+			private function ItemResultHandler(event:ResultEvent):void{	
+				var res:String=event.result.toString();
+				if(StringUtil.trim(res)!='yes') {
+					statusAlert(res);
+				}
+				else if(StringUtil.trim(res)=='yes')
+				{
+					orders.removeAll();
+					orders.refresh();		
+					clearNavigators();
+					openThanksPage();
+				}	
+				ro2.removeEventListener(ResultEvent.RESULT, ItemResultHandler); // Removing Listener
+				ro2.disconnect();							
+			}	
+			
+			private function ItemFaultHandler(fault:FaultEvent):void
+			{	
+				ro2.removeEventListener(FaultEvent.FAULT, ItemFaultHandler); // Removing Listener
+				ro2.disconnect();				
+				clearNavigators();
+			}	
+			//################ CODE FOR FINAL ORDER SUBMISSION TO SERVER ENDS HERE ###################	
+			
+			
+			
+			public function getCurrentDate():String{
+				var dt:Date=new Date();				
+				return String(dt.fullYear+","+dt.month+","+dt.date+","+dt.hours+","+dt.minutes);
+			}	
+			public function statusAlert(alertMsg:String):void
+			{
+				var msg:StatusAlert=new StatusAlert();
+				msg.message=alertMsg;
+				msg.open(this, true);				
+				PopUpManager.centerPopUp(msg);
+			}	
+			
+			//################ CODE FOR FINAL ORDER SUBMISSION TO SERVER ENDS HERE ###################		
+			
+			
+			//################ MISCALLANEOUS FUNCTIONS ###################		
+			static public function getItemIndexByProperty(array:ArrayCollection, property:String, value:String):Number
+			{				
+				for (var i:Number = 0; i < array.length; i++)
+				{
+					var obj:Object = Object(array[i])					
+					if (obj[property] == value)
+						return i;
+				}
+				return -1;
+			}
+			
+			private function getSelectedItemIndex(array:ArrayCollection,arg:String):int{	 	
+				var index:int=0;
+				var currDataValue:String;
+				for ( var i:Number=0; i<array.length; i++ ) 
+				{  
+					currDataValue = array[i].ItemId;
+					if ( currDataValue == arg ) 
+					{  
+						index=i;
+						break;
+					}
+				}		
+				return i;
+			}  			
+			
+			//############################################ NEWLY ADDED FUNCTIONS ###############
+			//Changing Table Number In Final Order Popup
+			public var newTableNo:int=0;
+			public function changeTableCnt(arg:String):void{	
+				var oldTableNo:int=parseInt(tableNo.text);
+				if(oldTableNo > 0 && arg=='plus') {
+					newTableNo=parseInt(tableNo.text)+1;	
+				}
+				else if(oldTableNo > 0 && arg=='minus') {	
+					newTableNo=parseInt(tableNo.text)-1;	
+				}					
+				else
+					return
+					tableNo.text=newTableNo.toString();
+			}			
+			
+			public function openConnection():SQLConnection
+			{
+				var dbFile:File = File.applicationDirectory.resolvePath("dinerpad.db");				
+				var conn:SQLConnection=new SQLConnection();  
+				try
+				{					
+					conn.open(dbFile);					
+				}
+				catch(err:Error)
+				{					
+					trace(ObjectUtil.toString(err));
+					return null;
+				}	
+				return conn;
+			}
+			
+			
+			public function connectionAlert():void{
+				var msg:AlertMessage = new AlertMessage();				
+				msg.open(this, true);				
+				PopUpManager.centerPopUp(msg);
+			}
+			
+			public function openSettingsPage():void{
+				var msg:SettingsPage = new SettingsPage();				
+				msg.open(this, true);				
+				PopUpManager.centerPopUp(msg);
+			}
+			
+			public function openOptionsPage():void{
+				var msg:OptionsPage=new OptionsPage();			
+				msg.open(this, true);					
+				PopUpManager.centerPopUp(msg);
+			}
+			
+			import spark.components.SplitViewNavigator;
+			import spark.components.ViewNavigator;
+			
+			public function updateSelections():void{
+				var itemTypesNavigator:SplitViewNavigator = splitNavigator;	
+				var setNavRight:ViewNavigator = itemTypesNavigator.getViewNavigatorAt(1) as ViewNavigator;				
+				setNavRight.pushView(views.ItemsTileView,displayItemsDP,null,null);	 
+				//FlexGlobals.topLevelApplication.selectedItemTypes.splice(0);
+			}
+			
+			
+			//################ CODE TO CLEAR THE NAVIGATORS AFTER CLICKING HOME OR ORDER BUTTON IN THANKS PAGE ###################		
+			public function clearNavigators():void{	
+				var refreshNavigator:SplitViewNavigator = splitNavigator;				
+				var clearNavigator1:ViewNavigator = refreshNavigator.getViewNavigatorAt(1) as ViewNavigator;
+				clearNavigator1.pushView(views.ItemsTileView,null,null,null);					
+			}
+			public function refreshCategories():void{	
+				var refreshNavigator:SplitViewNavigator = splitNavigator;				
+				var clearNavigator:ViewNavigator = refreshNavigator.getViewNavigatorAt(0) as ViewNavigator;
+				clearNavigator.pushView(views.MenuItems,null,null,null);					
+			}
+			//################ CODE TO CLEAR THE NAVIGATORS ENDS HERE ###################			
+			// Update the state based on the orientation of the device.
+			protected function resizeHandler(event:ResizeEvent):void {
+				currentState = aspectRatio;
+			}
+			
+			public function	refreshMainView():void{					
+				var settingsNavigator:SplitViewNavigator = splitNavigator;				
+				var setNavLeft:ViewNavigator = settingsNavigator.getViewNavigatorAt(0) as ViewNavigator;
+				var setNavRight:ViewNavigator = settingsNavigator.getViewNavigatorAt(1) as ViewNavigator;
+				setNavLeft.pushView(views.MenuItems,null,null,null);	
+				setNavRight.transitionsEnabled=true;
+				setNavRight.pushView(views.ItemsTileView,null,null,null);	 
+			}
+			
+			public function	showSettingsOption1():void{
+				//trace("Called");				
+				order_panel.visible=false;
+				order_panel.opened=false;
+				var settingsNavigator:SplitViewNavigator = splitNavigator;				
+				var setNavLeft:ViewNavigator = settingsNavigator.getViewNavigatorAt(0) as ViewNavigator;
+				var setNavRight:ViewNavigator = settingsNavigator.getViewNavigatorAt(1) as ViewNavigator;
+				setNavLeft.transitionsEnabled=false;
+				setNavLeft.pushView(views.SettingsMenu,null,null,null);	
+				setNavRight.transitionsEnabled=false;
+				setNavRight.pushView(views.SettingsOption1,null,null,null);	 
+			}
+			public function	showSettingsOption2():void{				
+				var settingsNavigator:SplitViewNavigator = splitNavigator;	
+				var setNavRight:ViewNavigator = settingsNavigator.getViewNavigatorAt(1) as ViewNavigator;
+				setNavRight.transitionsEnabled=false;
+				setNavRight.pushView(views.SettingsOption1,null,null,null);	 
+			}			
+			
+			//################ CODE FOR SQLITE Functions Starts HERE ###################		
+			private var conn:SQLConnection;
+			private var dbFile:File;
+			private var createStmt:SQLStatement;
+			private var createStatusStmt:SQLStatement;
+			
+			public function getQueryResults(query:String):ArrayCollection
+			{
+				dbFile = File.applicationDirectory.resolvePath("restaurant.db");				
+				conn = new SQLConnection();         
+				try
+				{					
+					conn.open(dbFile);
+				}
+				catch(err:Error)
+				{					
+					trace(ObjectUtil.toString(err));
+					return null;
+				}				
+				selectStmt = new SQLStatement();
+				selectStmt.sqlConnection = conn;
+				//var sql:String = "SELECT id, category as catName, description as catDesc FROM tbl_category";
+				selectStmt.text = query;				
+				try
+				{
+					selectStmt.execute();
+					trace("asdsd:");
+				}
+				catch (error:SQLError)
+				{					
+					trace("error.message:", error.message);				
+					return null;
+				}
+				var result:SQLResult = selectStmt.getResult();	
+				return new ArrayCollection( ArrayUtil.toArray(result.data));		
+			}
+			//################ CODE FOR SQLITE Functions Ends HERE ###################			
+			
+		]]>
+	</fx:Script>
+	
+	
+	<s:states>
+		<s:State name="landscape"/>
+	</s:states>
+	
+	
+	
+	// ################ UI BEGINS HERE ###################
+	
+	
+	
+	<s:SkinnableContainer top="0" left="0" right="0" bottom="0" skinClass="skins.splitViewSkin" >
+		
+		<s:SkinnableContainer id="splash_screen" top="0" left="0" right="0" bottom="0" backgroundAlpha="0" contentBackgroundAlpha="0">
+			<s:VGroup id="tableBtn"  right="50" bottom="80"/>	
+			 
+			
+			 
+			
+			<s:Image source="assets/titleB.png"  verticalCenter="0" horizontalCenter="0"  buttonMode="true"  click="openMainPage()"/>
+			
+			
+			<s:Label bottom="80"  buttonMode="true" click="showSettingsOption1() " verticalAlign="middle"  
+					 color="#fb1f1c" fontSize="25" horizontalCenter="0" styleName="labelHome"
+					 text="Tap to Enter"/>
+			
+		</s:SkinnableContainer>
+		
+		
+		<s:SkinnableContainer  depth="100" top="0" left="0" right="0" height="40" backgroundAlpha="0" contentBackgroundAlpha="0">
+			 
+			<s:Image id="settings"  y="10" left="400" buttonMode="true" height="16"
+					 click="openSettingsPage()" mouseChildren="true"
+					 source="assets/settings.png" useHandCursor="true" visible="false"/>
+			 
+			
+			<s:Button  id="types"  y="4" left="104" width="80" skinClass="skins.topButtons" height="30" label="Filter"
+					   click="openOptionsPage()" visible="false"/>
+			
+			<s:Button id="options" y="4" right="275" width="97" skinClass="skins.topButtons" height="30" label="Settings"
+					  click="showSettingsOption1()" visible="false"/>
+			
+			
+			 
+			
+			<s:Button id="home" visible="false" y="4" left="15"  skinClass="skins.topButtons"  width="80"  click="openSplashPage()" depth="102" height="30"	 label="Home"	  />
+			 
+			
+			<!-- MENU ORDER SLIDER -->
+			<containers:Drawer id="order_panel"  right="0" width="250"   skinClass="skins.DrawerSkin" visible="false">				
+				
+				<s:Label  id="subTotal"  fontSize="11" color="#ffffff"
+						  text="0.00"  right="5" bottom="60" visible="false"/>
+				
+				<s:List width="400" id="order_list"  left="8" right="8" top="1" bottom="80"   itemRenderer="comps.OrderItemRenderer"  dataProvider="{orders}" />
+				<s:Button label="ORDER" id="order" skinClass="skins.orderButton"  height="30" fontSize="11" left="5" right="5" bottom="22"  click="orderAlert()"/>
+				
+			</containers:Drawer>
+			<!-- MENU ORDER SLIDER -->	
+		</s:SkinnableContainer>
+		
+		<s:SplitViewNavigator  depth="10" visible="false" id="splitNavigator" backgroundAlpha="0" contentBackgroundAlpha="0"  skinClass="skins.splitViewSkin"   top="40" left="0" right="0" bottom="0" autoHideFirstViewNavigator="true" >		
+			<s:ViewNavigator id="itemsView" width="300" height="100%"   firstView="views.MenuItems"  contentBackgroundAlpha="0"  />
+			<s:ViewNavigator id="detailView" width="100%" height="100%"  firstView="views.ItemsTileView"  contentBackgroundAlpha="0" />
+		</s:SplitViewNavigator>
+		
+		
+		<!-- Thank You Popup -->
+		<s:SkinnableContainer depth="101" id="thankyou_screen" top="0" left="0" right="0" bottom="0"  backgroundAlpha="0"   contentBackgroundAlpha="0" visible="false">			
+			<s:Label text="Thank You, For your Order" color="#ffffff"   horizontalCenter="0" top="60"/>
+			 
+			<s:Button label="HOME"  horizontalCenter="0"  verticalCenter="0"  click="openSplashPage()" />			
+			<s:Image source="assets/dinerTab.png"  verticalCenter="188" horizontalCenter="2" />			
+			<s:Line x="1"  bottom="62.5" width="100%">
+				<s:stroke>
+					<s:SolidColorStroke color="#ed2626"/>
+				</s:stroke>
+			</s:Line>			
+		</s:SkinnableContainer>
+		<!-- Thank You Popup -->
+		
+		
+		<!-- Alert Window While Submitting an Order -->
+		<s:SkinnableContainer depth="150" id="order_alert"   backgroundColor="#333333" contentBackgroundAlpha="0"    visible="false" top="150"  horizontalCenter="0" width="510" height="550">
+			
+			<!-- CHANGE TABLE NUMBER IN WAITER MODE -->
+			<s:HGroup left="60" top="5" id="set_table" visible="false">
+				<s:Button width="35" height="40" label="-"  color="#d8ff00" skinClass="skins.plusMinusButt" click="changeTableCnt('minus')"/>		
+				<s:TextInput id="tableNo" fontSize="14" text="1" color="#FFFFFF" width="35" verticalCenter="0"/>
+				<s:Button  width="35" height="40" label="+"   color="#d8ff00" skinClass="skins.plusMinusButt" click="changeTableCnt('plus')"/>					
+			</s:HGroup>
+			<!-- CHANGE TABLE NUMBER IN WAITER MODE -->
+			
+			<s:Label text="You are about to Order" color="#cccccc"   horizontalCenter="0" top="15"/>
+			
+			<s:List left="30"  width="400" top="55"  bottom="131"  id="final_order_list"  borderColor="#000000"  
+					itemRenderer="comps.FinalOrderItemRenderer" /> 
+			
+			<s:VGroup horizontalCenter="0" bottom="15">
+				<s:HGroup>
+					<s:Button label="OK" width="95"  click="orderItems()"  />	 <s:Spacer width="5"/>
+					<s:Button label="CANCEL"  click="cancelOrder()"/>	
+				</s:HGroup>
+			</s:VGroup>
+			<s:Label x="370" y="432" id="total_inAlert" text="" color="#cccccc"/>
+			<s:Label x="300" y="432" text="Total"  color="#cccccc"/>
+		</s:SkinnableContainer>
+		<!-- Alert Window While Submitting an Order -->
+		
+	</s:SkinnableContainer>	
+</s:Application>
